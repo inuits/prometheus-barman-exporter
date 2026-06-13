@@ -111,13 +111,18 @@ scrape_configs:
 
 ## Metrics
 
-- `number=1` label indicates the newest backup
-- `barman_backups_size` and `barman_backup_wal_size` show successful backups only. Failed backups will not be listed here.
-- `barman_backups_total` includes failed backups
-- `barman_backups_failed`exposes the number of failed backups.
-- `barman_last_backup_copy_time` shows how long it takes to make a backup
-- `barman_up` shows all checks from `barman check SERVER_NAME` command. Output `OK` is `1.0`, `FAILED` is `0.0`.
-- `barman_metrics_update` shows a timestamp when barman metrics has been last updated
+- `number=1` label indicates the newest backup.
+- `barman_backup_size` and `barman_backup_wal_size` now include a `backup_type` label and are emitted for each successful backup entry.
+- `barman_backups_total` includes both successful and failed backups.
+- `barman_backups_failed` exposes the number of failed backups.
+- `barman_backups_by_type_total{backup_type="..."}` shows the number of backups grouped by type.
+- `barman_server_active`, `barman_server_disabled`, and `barman_server_in_recovery` expose the server state from `barman status`.
+- `barman_minimum_redundancy_satisfied` and `barman_retention_policy_enforced` expose policy status for each server.
+- `barman_last_backup_copy_time` shows how long it takes to make the latest backup.
+- `barman_up` shows all checks from `barman check SERVER_NAME`. Output `OK` is `1.0`, `FAILED` is `0.0`.
+- `barman_version_info` reports the Barman version discovered via `barman diagnose`.
+- `barman_home_*` metrics expose the filesystem size and inode usage of the configured Barman home directory.
+- `barman_metrics_update` shows a timestamp when the cached metrics were last refreshed.
 
 With `barman_last_backup` and `barman_first_backup` you can easily calculate when the latest backup was completed:
 
@@ -130,25 +135,13 @@ time() - barman_last_backup{instance="$instance", server="$server"}
 ```
 # HELP barman_backup_size Size of available backups
 # TYPE barman_backup_size gauge
-barman_backup_size{number="1",server="postgres-01"} 1.429365116108e+012
-barman_backup_size{number="2",server="postgres-01"} 1.429365116108e+012
-barman_backup_size{number="3",server="postgres-01"} 1.429365116108e+012
-barman_backup_size{number="4",server="postgres-01"} 1.429365116108e+012
-barman_backup_size{number="5",server="postgres-01"} 1.429365116108e+012
-barman_backup_size{number="6",server="postgres-01"} 1.429365116108e+012
-barman_backup_size{number="7",server="postgres-01"} 1.429365116108e+012
-barman_backup_size{number="8",server="postgres-01"} 1.429365116108e+012
+barman_backup_size{backup_type="full",number="1",server="postgres-01"} 1.429365116108e+012
+barman_backup_size{backup_type="incremental",number="2",server="postgres-01"} 1.429365116108e+012
 
 # HELP barman_backup_wal_size WAL size of available backups
 # TYPE barman_backup_wal_size gauge
-barman_backup_wal_size{number="1",server="postgres-01"} 1.94347270144e+011
-barman_backup_wal_size{number="2",server="postgres-01"} 3.06553290752e+011
-barman_backup_wal_size{number="3",server="postgres-01"} 3.05479548928e+011
-barman_backup_wal_size{number="4",server="postgres-01"} 4.79318350233e+011
-barman_backup_wal_size{number="5",server="postgres-01"} 2.87333312102e+011
-barman_backup_wal_size{number="6",server="postgres-01"} 2.73267294208e+011
-barman_backup_wal_size{number="7",server="postgres-01"} 3.65501716889e+011
-barman_backup_wal_size{number="8",server="postgres-01"} 2.34075717632e+011
+barman_backup_wal_size{backup_type="full",number="1",server="postgres-01"} 1.94347270144e+011
+barman_backup_wal_size{backup_type="incremental",number="2",server="postgres-01"} 3.06553290752e+011
 
 # HELP barman_backups_total Total number of backups
 # TYPE barman_backups_total gauge
@@ -157,6 +150,31 @@ barman_backups_total{server="postgres-01"} 9.0
 # HELP barman_backups_failed Number of failed backups
 # TYPE barman_backups_failed gauge
 barman_backups_failed{server="postgres-01"} 1.0
+
+# HELP barman_backups_by_type_total Number of backups by type
+# TYPE barman_backups_by_type_total gauge
+barman_backups_by_type_total{backup_type="full",server="postgres-01"} 7.0
+barman_backups_by_type_total{backup_type="incremental",server="postgres-01"} 2.0
+
+# HELP barman_server_active Whether the Barman server is active
+# TYPE barman_server_active gauge
+barman_server_active{server="postgres-01"} 1.0
+
+# HELP barman_server_disabled Whether the Barman server is disabled
+# TYPE barman_server_disabled gauge
+barman_server_disabled{server="postgres-01"} 0.0
+
+# HELP barman_server_in_recovery Whether the Barman server is in recovery
+# TYPE barman_server_in_recovery gauge
+barman_server_in_recovery{server="postgres-01"} 0.0
+
+# HELP barman_minimum_redundancy_satisfied Whether minimum redundancy is satisfied
+# TYPE barman_minimum_redundancy_satisfied gauge
+barman_minimum_redundancy_satisfied{server="postgres-01"} 1.0
+
+# HELP barman_retention_policy_enforced Whether retention policy is enforced
+# TYPE barman_retention_policy_enforced gauge
+barman_retention_policy_enforced{server="postgres-01"} 1.0
 
 # HELP barman_last_backup Last successful backup timestamp
 # TYPE barman_last_backup gauge
