@@ -130,6 +130,24 @@ class BarmanCollector:
             barman_backups_failed=core.GaugeMetricFamily(
                 "barman_backups_failed", "Number of failed backups",
                 labels=["server"]),
+            barman_backups_by_type_total=core.GaugeMetricFamily(
+                "barman_backups_by_type_total", "Number of backups by type",
+                labels=["server", "backup_type"]),
+            barman_server_active=core.GaugeMetricFamily(
+                "barman_server_active", "Whether the Barman server is active",
+                labels=["server"]),
+            barman_server_disabled=core.GaugeMetricFamily(
+                "barman_server_disabled", "Whether the Barman server is disabled",
+                labels=["server"]),
+            barman_server_in_recovery=core.GaugeMetricFamily(
+                "barman_server_in_recovery", "Whether the Barman server is in recovery",
+                labels=["server"]),
+            barman_minimum_redundancy_satisfied=core.GaugeMetricFamily(
+                "barman_minimum_redundancy_satisfied", "Whether minimum redundancy is satisfied",
+                labels=["server"]),
+            barman_retention_policy_enforced=core.GaugeMetricFamily(
+                "barman_retention_policy_enforced", "Whether retention policy is enforced",
+                labels=["server"]),
             barman_last_backup=core.GaugeMetricFamily(
                 "barman_last_backup", "Last successful backup timestamp",
                 labels=["server"]),
@@ -157,6 +175,8 @@ class BarmanCollector:
             self.collect_last_backup(barman_server)
             self.collect_backups_total(barman_server)
             self.collect_backups_failed(barman_server)
+            self.collect_backups_by_type_total(barman_server)
+            self.collect_server_status_flags(barman_server)
             self.collect_last_backup_copy_time(barman_server)
             self.collect_barman_backup_size(barman_server)
             self.collect_barman_backup_wal_size(barman_server)
@@ -212,6 +232,36 @@ class BarmanCollector:
     def collect_backups_failed(self, barman_server):
         self.collectors['barman_backups_failed'].add_metric(
             [barman_server.name], len(barman_server.backups_failed))
+
+    def collect_backups_by_type_total(self, barman_server):
+        counts = {}
+        for backup in barman_server.backups_done + barman_server.backups_failed:
+            backup_type = backup.get('backup_type', 'unknown')
+            counts[backup_type] = counts.get(backup_type, 0) + 1
+
+        for backup_type, count in counts.items():
+            self.collectors['barman_backups_by_type_total'].add_metric(
+                [barman_server.name, backup_type], count)
+
+    def collect_server_status_flags(self, barman_server):
+        status = barman_server.status
+
+        self.collectors['barman_server_active'].add_metric(
+            [barman_server.name], 1 if str(status.get('active', '')).lower() == 'true' else 0)
+        self.collectors['barman_server_disabled'].add_metric(
+            [barman_server.name], 1 if str(status.get('disabled', '')).lower() == 'true' else 0)
+
+        is_in_recovery = str(status.get('is_in_recovery', '')).lower() in ('true', 'in production', 'production')
+        self.collectors['barman_server_in_recovery'].add_metric(
+            [barman_server.name], 1 if is_in_recovery else 0)
+
+        redundancy = str(status.get('minimum_redundancy', '')).lower()
+        self.collectors['barman_minimum_redundancy_satisfied'].add_metric(
+            [barman_server.name], 1 if 'satisfied' in redundancy else 0)
+
+        retention = str(status.get('retention_policies', '')).lower()
+        self.collectors['barman_retention_policy_enforced'].add_metric(
+            [barman_server.name], 1 if 'enforced' in retention else 0)
 
     def backup_details(self, barman_server):
         details = {}
