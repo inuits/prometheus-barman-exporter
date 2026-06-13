@@ -22,6 +22,21 @@ class Barman:
     def __init__(self):
         self.check_barman_version()
 
+    def diagnose(self):
+        return self.cli('diagnose')
+
+    def home_directory(self):
+        try:
+            return self.diagnose()['global']['config']['barman_home']
+        except Exception:
+            return '/var/lib/barman'
+
+    def version_value(self):
+        try:
+            return self.diagnose()['global']['system_info']['barman_ver']
+        except Exception:
+            return self.version()
+
     def check_barman_version(self):
         barman_version = tuple(int(v) for v in self.version().split('.'))
         if barman_version < (2, 9):
@@ -85,6 +100,24 @@ class BarmanCollector:
         self.barman = barman
         self.servers = servers
         self.collectors = dict(
+            barman_version_info=core.GaugeMetricFamily(
+                'barman_version_info', "Barman version information",
+                labels=['version']),
+            barman_home_filesystem_size_bytes=core.GaugeMetricFamily(
+                'barman_home_filesystem_size_bytes',
+                "Total size of the filesystem for the Barman home directory"),
+            barman_home_free_bytes=core.GaugeMetricFamily(
+                'barman_home_free_bytes',
+                "Free space available to non-root users on the Barman home filesystem"),
+            barman_home_avail_bytes=core.GaugeMetricFamily(
+                'barman_home_avail_bytes',
+                "Free space available on the Barman home filesystem"),
+            barman_home_files=core.GaugeMetricFamily(
+                'barman_home_files',
+                "Total number of inodes on the Barman home filesystem"),
+            barman_home_free=core.GaugeMetricFamily(
+                'barman_home_free',
+                "Free inodes on the Barman home filesystem"),
             barman_backup_size=core.GaugeMetricFamily(
                 'barman_backup_size', "Size of available backups",
                 labels=['server', 'number', 'backup_type']),
@@ -115,6 +148,9 @@ class BarmanCollector:
         )
 
     def collect(self):
+        self.collect_barman_version_info()
+        self.collect_barman_home_filesystem_metrics(self.barman.home_directory())
+
         for server_name in self.barman_servers():
             barman_server = BarmanServer(self.barman, server_name)
             self.collect_first_backup(barman_server)
@@ -135,6 +171,25 @@ class BarmanCollector:
             return self.barman.servers()
         else:
             return self.servers
+
+    def collect_barman_version_info(self):
+        self.collectors['barman_version_info'].add_metric(
+            [self.barman.version_value()], 1)
+
+    def collect_barman_home_filesystem_metrics(self, path):
+        stats = os.statvfs(path)
+        block_size = stats.f_frsize if hasattr(stats, 'f_frsize') else stats.f_bsize
+        total_bytes = stats.f_blocks * block_size
+        free_bytes = stats.f_bfree * block_size
+        avail_bytes = stats.f_bavail * block_size
+        total_files = stats.f_files
+        free_files = stats.f_ffree
+
+        self.collectors['barman_home_filesystem_size_bytes'].add_metric([], total_bytes)
+        self.collectors['barman_home_free_bytes'].add_metric([], free_bytes)
+        self.collectors['barman_home_avail_bytes'].add_metric([], avail_bytes)
+        self.collectors['barman_home_files'].add_metric([], total_files)
+        self.collectors['barman_home_free'].add_metric([], free_files)
 
     def collect_first_backup(self, barman_server):
         if barman_server.status['first_backup'] and barman_server.status['first_backup'] != 'None':
